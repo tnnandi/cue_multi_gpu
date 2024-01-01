@@ -28,9 +28,14 @@ from img import plotting
 import img.constants as constants
 import img.filters as image_filters
 from img.data_metrics import DatasetStats
+from accelerate import Accelerator
+from accelerate import DistributedDataParallelKwargs
 
 
 def train(model, optimizer, data_loader, config, epoch, collect_data_metrics=False, classify=False):
+
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
     output_dir = config.epoch_dirs[epoch]
     metrics_report = metrics.MetricTracker(config.report_interval, prefix="TRAIN EPOCH %d" % epoch)
     data_stats = DatasetStats("%sTRAIN_" % output_dir, classes=config.classes)
@@ -44,7 +49,8 @@ def train(model, optimizer, data_loader, config, epoch, collect_data_metrics=Fal
         losses, outputs = model(images, targets)
         total_loss = sum(loss for loss in losses.values())
         optimizer.zero_grad()
-        total_loss.backward()
+        # total_loss.backward()
+        accelerator.backward(total_loss)
         optimizer.step()
         metrics_report.batch_update(losses)
         outputs = [{k: v.to(torch.device("cpu")) for k, v in t.items()} for t in outputs]

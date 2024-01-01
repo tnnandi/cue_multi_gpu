@@ -157,6 +157,7 @@ def annotate(image, target, classes, display_boxes=True, display_classes=True, c
         for i, points in enumerate(target[TargetType.keypoints]):
             filtered = False
             for p in points:
+                print("------------------- p: ", p)
                 if p[2] != constants.KP_FILTERED:
                     cv2.circle(image, (p[0], p[1]), int(image_dim/100), color=color, thickness=-thickness)
                 else:

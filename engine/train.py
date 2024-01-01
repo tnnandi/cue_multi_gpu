@@ -32,13 +32,19 @@ import torch
 from enum import Enum
 import logging
 import img.constants as constants
-
+from accelerate import Accelerator
 torch.manual_seed(0)
 
 
 print("*********************************")
 print("*  cue (%s): training mode  *" % engine.__version__)
 print("*********************************")
+
+from accelerate import DistributedDataParallelKwargs
+ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+# accelerator = Accelerator()
+accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+device = accelerator.device
 
 # ------ CLI ------
 parser = argparse.ArgumentParser(description='Cue model training')
@@ -55,6 +61,7 @@ PHASES = Enum('PHASES', 'TRAIN VALIDATE')
 # ---------Training dataset--------
 streaming = False
 if args.data_config is None:
+    print("++++++++++++++++++++++++++++++++  static training dataset +++++++++++++++++++++++++++++++++++")
     # static (pre-generated data)
     input_datasets = []
     for dataset_id in range(len(config.dataset_dirs)):
@@ -70,6 +77,7 @@ if args.data_config is None:
     images, targets = next(iter(DataLoader(dataset=dataset, batch_size=min(len(dataset), 400), shuffle=True,
                                            collate_fn=datasets.collate_fn)))
 else:
+    print("++++++++++++++++++++++++++++++++  streaming training dataset +++++++++++++++++++++++++++++++++++")
     # streaming (on-the-fly data generation)
     # data divided into training / validation using chromosomes (since dataset length unknown)
     # data_config.chr_names defines the split (exclude/include)
@@ -99,13 +107,18 @@ if config.pretrained_model is not None:
 optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.learning_rate_decay_interval,
                                                gamma=config.learning_rate_decay_factor)
-model.to(config.device)
+model.to(accelerator.device) # not mandatory
+
+train_dataloader = data_loaders[PHASES.TRAIN]
+eval_dataloader = data_loaders[PHASES.VALIDATE]
+
+model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
 
 # ------ Training ------
 for epoch in range(config.num_epochs):
-    core.train(model, optimizer, data_loaders[PHASES.TRAIN], config, epoch, collect_data_metrics=(epoch == 0))
+    core.train(model, optimizer, train_dataloader, config, epoch, collect_data_metrics=(epoch == 0))
     torch.save(model.state_dict(), "%s.epoch%d" % (config.model_path, epoch))
-    core.evaluate(model, data_loaders[PHASES.VALIDATE], config, config.device, config.epoch_dirs[epoch],
+    core.evaluate(model, eval_dataloaders, config, config.device, config.epoch_dirs[epoch],
                     collect_data_metrics=(epoch == 0), given_ground_truth=True, filters=False)
     lr_scheduler.step()
 
