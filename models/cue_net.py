@@ -10,8 +10,9 @@ import socket
 class CueModelConfig:
     NETWORK_TYPE = Enum("TYPE", 'HG ')
 
-    def __init__(self, config):
+    def __init__(self, config, config_wandb):
         self.config = config
+        self.config_wandb = config_wandb
 
     def get_model(self):
         network_type = self.NETWORK_TYPE[self.config.model_architecture]
@@ -20,16 +21,17 @@ class CueModelConfig:
         }[network_type]()
 
     def hourglass(self):
-        return MultiSVHG(self.config)
+        return MultiSVHG(self.config, self.config_wandb)
 
 class MultiSVHG(nn.Module):
     # Stacked hourglass network for SV breakpoint prediction
     # Implementation based on Newell et al human pose estimation models (ECCV 2016, NeurIPS 2017)
     # PoseNet (https://github.com/princeton-vl/pose-ae-train)
 
-    def __init__(self, config):
+    def __init__(self, config, config_wandb):
         super(MultiSVHG, self).__init__()
         self.config = config
+        self.config_wandb = config_wandb
         self.heatmap_generator = SVKeypointHeatmapUtility(config.image_dim, num_kps_per_sv=config.num_keypoints,
                                                           num_sv_labels=config.num_classes-1, sigma=config.sigma,
                                                           stride=config.stride,
@@ -38,7 +40,9 @@ class MultiSVHG(nn.Module):
         self.hg_out_dim = self.heatmap_generator.num_heatmap_channels
         self.hg_expansion = 128
         self.hg_depth = 4
-        self.hg_stack_size = 4
+        print("======================== config_wandb: ", config_wandb)
+        self.hg_stack_size = config_wandb["n_hg"]
+        # self.hg_stack_size = 4
         self.backbone = modules.HourglassBackbone(self.config.n_signals, self.hg_in_dim)
         self.hg_stack = nn.ModuleList([nn.Sequential(
             modules.Hourglass(self.hg_depth, self.hg_in_dim, self.hg_expansion)

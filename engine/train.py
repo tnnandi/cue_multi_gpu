@@ -33,8 +33,14 @@ from enum import Enum
 import logging
 import img.constants as constants
 from accelerate import Accelerator
-torch.manual_seed(0)
+import wandb
+import yaml
 
+torch.manual_seed(0)
+wandb.login()
+
+with open('config_wandb_hpo.yaml', 'r') as file:
+    sweep_config = yaml.safe_load(file)
 
 print("*********************************")
 print("*  cue (%s): training mode  *" % engine.__version__)
@@ -52,6 +58,22 @@ parser.add_argument('--config', help='Training config')
 parser.add_argument('--data_config', help='(Optional) Dataset config for streaming', default=None)
 args = parser.parse_args()
 # -----------------
+
+
+# config and setup for wandb
+# config_wandb = dict(n_hg = 4)
+
+wandb.config = {"n_hg": 4}
+# wandb.config = {"epochs": 100, "learning_rate": 0.001, "batch_size": 128}
+config_wandb = wandb.config
+
+print(10*'-')
+print('Config for this wandb experiment \n')
+print(config_wandb)
+print(10*'-')
+
+run = wandb.init(project="Cue", entity='tnnandi', config=config_wandb, group='Cue_HPO' )#name=args.exp_name, group=args.group_wandb)
+
 
 # ------ Initialization ------
 # load the model configs / setup the experiment
@@ -101,11 +123,12 @@ logging.info("Size of train set: %d; validation set: %d" % (len(data_loaders[PHA
                                                             len(data_loaders[PHASES.VALIDATE])))
 
 # ---------Model--------
-model = models.CueModelConfig(config).get_model()
+model = models.CueModelConfig(config, config_wandb).get_model()
 if config.pretrained_model is not None:
     model.load_state_dict(torch.load(config.pretrained_model, config.device))
 
 model.to(accelerator.device) # not mandatory
+wandb.watch(model, criterion = None, log = "all", log_freq=1)
 
 optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.learning_rate_decay_interval,
@@ -123,5 +146,10 @@ for epoch in range(config.num_epochs):
     core.evaluate(model, eval_dataloader, config, config.device, config.epoch_dirs[epoch],
                     collect_data_metrics=(epoch == 0), given_ground_truth=True, filters=False)
     lr_scheduler.step()
+
+
+# sweep_id = wandb.sweep(sweep=sweep_config, project='Cue')
+
+wandb.finish()
 
 torch.save(model.state_dict(), config.model_path)

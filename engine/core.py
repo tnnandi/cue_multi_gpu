@@ -30,7 +30,7 @@ import img.filters as image_filters
 from img.data_metrics import DatasetStats
 from accelerate import Accelerator
 from accelerate import DistributedDataParallelKwargs
-
+import wandb
 
 def train(model, optimizer, data_loader, config, epoch, accelerator, collect_data_metrics=False, classify=False):
 
@@ -51,6 +51,8 @@ def train(model, optimizer, data_loader, config, epoch, accelerator, collect_dat
         targets = [{k: v.to(config.device) for k, v in t.items()} for t in targets]
         losses, outputs = model(images, targets)
         total_loss = sum(loss for loss in losses.values())
+        # wandb.log({"total_loss: ": total_loss})
+        wandb.log({"total_loss": total_loss.item(), "epoch": epoch}) #, "batch_id": batch_id})
         optimizer.zero_grad()
         # total_loss.backward()
         accelerator.backward(total_loss)
