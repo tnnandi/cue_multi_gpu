@@ -32,16 +32,19 @@ from accelerate import Accelerator
 from accelerate import DistributedDataParallelKwargs
 
 
-def train(model, optimizer, data_loader, config, epoch, collect_data_metrics=False, classify=False):
+def train(model, optimizer, data_loader, config, epoch, accelerator, collect_data_metrics=False, classify=False):
 
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+    # ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    # accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
     output_dir = config.epoch_dirs[epoch]
     metrics_report = metrics.MetricTracker(config.report_interval, prefix="TRAIN EPOCH %d" % epoch)
     data_stats = DatasetStats("%sTRAIN_" % output_dir, classes=config.classes)
     model.train()
     torch.set_grad_enabled(True)
     for batch_id, (images, targets) in enumerate(data_loader):
+        # print("images: ", images, " from device ", torch.cuda.current_device())
+        # print("targets: ", targets, " from device ", torch.cuda.current_device())
+        # print("targets.keys(): ", tuple(target.keys() for target in targets), " from device ", torch.cuda.current_device())
         if collect_data_metrics:
             data_stats.batch_update(targets)
         images = list(image.to(config.device) for image in images)
@@ -69,10 +72,12 @@ def train(model, optimizer, data_loader, config, epoch, collect_data_metrics=Fal
                 plotting.save(image.permute(1, 2, 0).cpu().numpy(), "%s/heatmaps.train.%d.orig.png" %
                               (output_dir, output["image_id"].item()))
         if batch_id and batch_id % config.report_interval == 0:
+            print("***************** len(images) : ", len(images))
             plotting.plot_images(images, outputs, range(len(images)), config.classes, targets2=targets,
                                  fig_name="%s/train.batch%d.png" % (output_dir, batch_id))
         if batch_id and batch_id % config.model_checkpoint_interval == 0:
-            torch.save(model.state_dict(), "%s.epoch%d.batch%d" % (config.model_path, epoch, batch_id))
+            accelerator.save_model(model.state_dict(), "%s.epoch%d.batch%d" % (config.model_path, epoch, batch_id))
+            # torch.save(model.state_dict(), "%s.epoch%d.batch%d" % (config.model_path, epoch, batch_id))
 
     if collect_data_metrics:
         data_stats.report()

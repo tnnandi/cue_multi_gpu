@@ -97,4 +97,5 @@ class DatasetStats:
         if issubclass(type(plt_handle), matplotlib.axes.SubplotBase):
             plt_handle.set_xticks(xlabels)
         else:
-            plt_handle.xticks(xlabels)
+            plt.xticks(xlabels)
+            # plt_handle.xticks(xlabels)

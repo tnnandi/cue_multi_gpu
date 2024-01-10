@@ -34,7 +34,7 @@ import copy
 import scipy.signal
 from scipy.ndimage.filters import maximum_filter, gaussian_filter
 from scipy.ndimage.morphology import generate_binary_structure
-
+import torch
 
 def heatmap_np(overlap2D, img_size=1000, vmin=0, vmax=100, cvresize=False):
     overlap2D = overlap2D.transpose()
@@ -141,6 +141,9 @@ def save_n_channel(image, fig_name, dpi=1000, no_border=True):
     plt.close(fig)
 
 def annotate(image, target, classes, display_boxes=True, display_classes=True, color=(153 / 255, 153 / 255, 10 / 255)):
+    # print("image: ", image, " from device ", torch.cuda.current_device())
+    # print("image type ", type(image), " and shape ", image.shape, " from device ", torch.cuda.current_device())
+    # print("target: ", target, " from device ", torch.cuda.current_device())
     if target is None:
         return image
     image_dim = image.shape[0]
@@ -154,12 +157,16 @@ def annotate(image, target, classes, display_boxes=True, display_classes=True, c
             cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), color, thickness)
 
     if TargetType.keypoints in target:
+        # print("+++++++++++++++ target: ", target, " from ", torch.cuda.current_device(), " with type ", type(target))
         for i, points in enumerate(target[TargetType.keypoints]):
             filtered = False
             for p in points:
-                print("------------------- p: ", p)
+                p = [int(x) for x in p.tolist()]
+                # print("------------------- p: ", p, " from ", torch.cuda.current_device())
+                # print("------------------- p[0]: ", p[0], " p[1]: ", p[1], " p[2]: ", p[2])
+                # convert elements in p for torch tensor to floats () for some reason these are torch tensors instead of pure ints for accelerate runs)
                 if p[2] != constants.KP_FILTERED:
-                    cv2.circle(image, (p[0], p[1]), int(image_dim/100), color=color, thickness=-thickness)
+                    cv2.circle(image, (p[0], p[1]), int(image_dim/100), color=color, thickness=-thickness) # problematic line
                 else:
                     cv2.circle(image, (p[0], p[1]), int(image_dim/100), color=(128/255, 128/255, 128/255),
                                thickness=-thickness)
@@ -187,6 +194,8 @@ def overlay_keypoint_heatmaps(image, target):
         plt.imshow(heatmaps, vmin=0., vmax=1., cmap=keypoint_cmap, alpha=0.5)
 
 def plot_images(images, targets, indices, classes, fig_name, targets2=None, max_dim_display=6, show_annotation=True):
+    # print("^^^^^^^^^^^^^^^^^^^^^^^ indices: ", indices) #, " targets2: ", targets2)i
+    # print("^^^^^^^^^^^^^^^^^^^^^^^ len(targets): ", len(targets), " with type(targets): ", type(targets), " with targets: ", targets)
     fig = plt.figure(figsize=(10, 10))
     plt.subplots_adjust(hspace=.4)
     rows = min(int(np.sqrt(len(indices))), max_dim_display)
@@ -200,7 +209,8 @@ def plot_images(images, targets, indices, classes, fig_name, targets2=None, max_
         if image.shape[2] == 1:
             image = cv2.merge((image,image,image))
         if show_annotation:
-            image = annotate(image, targets[indices[i]], classes, display_boxes=True, color=(0, 76 / 255, 153 / 255))
+            # print(" ******** indices[i] = ", indices[i])
+            image = annotate(image, targets[indices[i]], classes, display_boxes=True, color=(0, 76 / 255, 153 / 255)) # problematic line
             if targets2 is not None:
                 image = annotate(image, targets2[indices[i]], classes, display_boxes=True, display_classes=True,
                                  color=(153 / 255, 153 / 255, 10 / 255))

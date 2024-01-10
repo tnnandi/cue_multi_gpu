@@ -5,6 +5,7 @@ from img import constants
 from models import modules
 from img import utils
 from img.heatmap import SVKeypointHeatmapUtility
+import socket
 
 class CueModelConfig:
     NETWORK_TYPE = Enum("TYPE", 'HG ')
@@ -92,7 +93,8 @@ class MultiSVHG(nn.Module):
         fl = lkt.sum(dim=(1, 2, 3, 4))
         weight_loss = [fl[i] * stage_weights[i] for i in range(len(stage_weights))]
         loss = sum(weight_loss) / sum(stage_weights)
-        print('Focal L2 loss: ', fl.detach().cpu().numpy())
+        # print('Focal L2 loss: ', fl.detach().cpu().numpy())
+        print('Focal L2 loss: ', fl.detach().cpu().numpy(), " from device ", fl.device, " from node ", socket.gethostname())
         return loss
 
 

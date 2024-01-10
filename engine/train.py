@@ -104,10 +104,12 @@ logging.info("Size of train set: %d; validation set: %d" % (len(data_loaders[PHA
 model = models.CueModelConfig(config).get_model()
 if config.pretrained_model is not None:
     model.load_state_dict(torch.load(config.pretrained_model, config.device))
+
+model.to(accelerator.device) # not mandatory
+
 optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.learning_rate_decay_interval,
                                                gamma=config.learning_rate_decay_factor)
-model.to(accelerator.device) # not mandatory
 
 train_dataloader = data_loaders[PHASES.TRAIN]
 eval_dataloader = data_loaders[PHASES.VALIDATE]
@@ -116,9 +118,9 @@ model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.
 
 # ------ Training ------
 for epoch in range(config.num_epochs):
-    core.train(model, optimizer, train_dataloader, config, epoch, collect_data_metrics=(epoch == 0))
+    core.train(model, optimizer, train_dataloader, config, epoch, accelerator, collect_data_metrics=(epoch == 0))
     torch.save(model.state_dict(), "%s.epoch%d" % (config.model_path, epoch))
-    core.evaluate(model, eval_dataloaders, config, config.device, config.epoch_dirs[epoch],
+    core.evaluate(model, eval_dataloader, config, config.device, config.epoch_dirs[epoch],
                     collect_data_metrics=(epoch == 0), given_ground_truth=True, filters=False)
     lr_scheduler.step()
 
